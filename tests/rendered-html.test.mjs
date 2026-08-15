@@ -22,6 +22,16 @@ test("source and built pages use anonymous example copy", async () => {
   assertJianzhangContent(builtHtml);
 });
 
+test("service worker advances the cache for the anonymous copy update", async () => {
+  const [sourceWorker, builtWorker] = await Promise.all([
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../dist/client/sw.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(sourceWorker, /jianzhang-0\.2\.8/);
+  assert.equal(builtWorker, sourceWorker);
+});
+
 test("worker serves the current Jianzhang page at the root", async () => {
   const builtHtml = await readFile(builtIndexUrl, "utf8");
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
