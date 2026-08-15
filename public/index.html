@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#121417">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="简账">
+  <meta property="og:title" content="简账 · 生活账本">
+  <meta property="og:description" content="极速记录、自动记账、生活时间轴与搜索分析">
+  <meta property="og:image" content="./og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>简账 · 生活账本</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <button id="ledgerSwitch" class="ledger-switch">生活账本⌄</button>
+    <div class="brand">简账 <span>0.2</span></div>
+    <button id="openSettings" class="icon-btn">⚙</button>
+  </header>
+
+  <main>
+    <section id="page-home" class="page active">
+      <div class="summary-card">
+        <div class="eyebrow">本月</div>
+        <div class="balance"><span>结余</span><strong id="homeBalance">¥0.00</strong></div>
+        <div class="summary-grid"><div><span>收入</span><b id="homeIncome" class="income">¥0.00</b></div><div><span>支出</span><b id="homeExpense" class="expense">¥0.00</b></div></div>
+      </div>
+      <div class="home-actions">
+        <button id="homeAdd" class="primary-action">＋ 记一笔</button>
+        <button id="homeAI" class="dark-action">✦ 快记</button>
+      </div>
+      <div class="section-head"><h2>最近账单</h2><button data-nav="records">全部</button></div>
+      <div id="recentList" class="record-list"></div>
+    </section>
+
+    <section id="page-records" class="page">
+      <div class="section-head"><h2>账单</h2></div>
+      <div class="filters">
+        <select id="recordTypeFilter"><option value="all">全部收支</option><option value="expense">支出</option><option value="income">收入</option></select>
+        <select id="recordTagFilter"><option value="all">全部标签</option></select>
+      </div>
+      <div id="recordList" class="record-list"></div>
+    </section>
+
+    <section id="page-stats" class="page">
+      <div class="section-head"><h2>搜索与分析</h2></div>
+      <div class="search-panel">
+        <div class="search-box"><input id="semanticInput" placeholder="例如：这个月和刘兴昊吃饭花了多少？"><button id="semanticBtn">查询</button></div>
+        <div class="search-examples">
+          <button data-query="本月餐饮支出">本月餐饮</button>
+          <button data-query="本周咖啡支出">本周咖啡</button>
+          <button data-query="今年旅游支出">今年旅游</button>
+        </div>
+        <div id="semanticResult" class="semantic-result hidden"></div>
+      </div>
+
+      <div class="stats-controls">
+        <select id="statsPeriod"><option value="day">日</option><option value="week">周</option><option value="month" selected>月</option><option value="quarter">季度</option><option value="year">年</option></select>
+        <input id="statsDate" type="date">
+      </div>
+      <div class="metrics3"><div><span>收入</span><strong id="statsIncome" class="income">¥0.00</strong></div><div><span>支出</span><strong id="statsExpense" class="expense">¥0.00</strong></div><div><span>结余</span><strong id="statsBalance">¥0.00</strong></div></div>
+      <div class="panel"><div class="panel-head"><h3>收支类型</h3><span>饼状图</span></div><div id="pieChart" class="pie-wrap"></div></div>
+      <div class="panel"><div class="panel-head"><h3>收支趋势</h3><span>柱状图</span></div><div id="barChart" class="bars"></div></div>
+      <div class="panel"><div class="panel-head"><h3>分类支出</h3></div><div id="categoryRank"></div></div>
+      <div class="panel"><div class="panel-head"><h3>日报表</h3></div><div id="dailyReport"></div></div>
+    </section>
+
+    <section id="page-week" class="page">
+      <div class="week-head">
+        <div><div class="eyebrow">周视图 · 日视图嵌入</div><h2 id="weekTitle"></h2></div>
+        <div><button id="prevWeek">‹</button><button id="weekToday">今天</button><button id="nextWeek">›</button></div>
+      </div>
+      <div id="weekStrip" class="week-strip"></div>
+      <div class="metrics3"><div><span>本周收入</span><strong id="weekIncome" class="income">¥0.00</strong></div><div><span>本周支出</span><strong id="weekExpense" class="expense">¥0.00</strong></div><div><span>本周结余</span><strong id="weekBalance">¥0.00</strong></div></div>
+      <input id="dayDate" type="date" class="hidden">
+
+      <article id="dayCard" class="day-card">
+        <div class="day-overlay">
+          <div id="dayDateLabel" class="day-date"></div>
+          <div class="day-title-row"><h2 id="dayTitle">这一天</h2><span id="dayMood"></span></div>
+          <p id="dayNote" class="day-note hidden"></p>
+          <div class="day-totals"><span>收入 <b id="dayIncome">¥0.00</b></span><span>支出 <b id="dayExpense">¥0.00</b></span><span>结余 <b id="dayBalance">¥0.00</b></span></div>
+          <div id="dayRecords" class="day-records"></div>
+        </div>
+      </article>
+      <div class="day-tools">
+        <button id="editDay">编辑日视图</button>
+        <label>背景图<input id="dayBgInput" type="file" accept="image/*" hidden></label>
+        <button id="clearDayBg">清除背景</button>
+      </div>
+
+      <div class="panel template-panel">
+        <div class="panel-head"><div><h3>⚡ 快捷模板</h3><span>日视图一键记账</span></div><button id="manageTemplates">管理</button></div>
+        <div id="templateStrip" class="template-strip"></div>
+      </div>
+    </section>
+
+    <section id="page-settings" class="page">
+      <div class="section-head"><h2>设置</h2></div>
+      <div class="settings-list">
+        <button id="manageLedgers">账本管理 <span>›</span></button>
+        <button id="manageCategories">分类管理 <span>›</span></button>
+        <button id="exportData">导出 JSON 备份 <span>›</span></button>
+        <label class="settings-button">导入 JSON 备份 <input id="importData" type="file" accept="application/json" hidden><span>›</span></label>
+        <button id="autoTileSettings">自动记账磁贴 <span>›</span></button>
+        <button id="locationTest">测试定位权限 <span>›</span></button>
+        <button id="installHelp">安装到桌面/主屏幕 <span>›</span></button>
+      </div>
+      <div id="systemInfo" class="system-info"></div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button data-nav="home" class="active"><b>⌂</b><span>首页</span></button>
+    <button data-nav="records"><b>☷</b><span>账单</span></button>
+    <button id="navAdd" class="nav-add">＋</button>
+    <button data-nav="stats"><b>◔</b><span>视图</span></button>
+    <button data-nav="week"><b>▦</b><span>周历</span></button>
+  </nav>
+</div>
+
+<div id="backdrop" class="backdrop hidden"></div>
+
+<section id="recordSheet" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <div class="record-head">
+    <button data-close="recordSheet" class="icon-btn">×</button>
+    <div class="seg"><button data-type="expense" class="active expense-seg">支出</button><button data-type="income" class="income-seg">收入</button></div>
+    <button id="voiceFromRecord" class="icon-btn">🎙</button>
+  </div>
+  <div id="autoRecognizeBanner" class="auto-recognize-banner hidden">
+    <div><b>⚡ 已自动识别当前页面</b><span id="autoRecognizeSummary">金额、分类和备注已预填，可直接修改。</span></div>
+    <button id="showRawCapture">查看原文</button>
+  </div>
+  <div id="autoAmountWarning" class="auto-amount-warning hidden">未识别到金额，请补充</div>
+  <div id="rawCaptureBox" class="raw-capture hidden"></div>
+  <div id="primaryGrid" class="category-grid"></div>
+  <div id="secondaryGrid" class="secondary-grid"></div>
+
+  <div class="quick-chips">
+    <button id="qLedger">生活账本</button>
+    <button data-day-offset="0" class="active">今天</button>
+    <button data-day-offset="-1">昨天</button>
+    <button data-day-offset="-2">前天</button>
+    <button data-day-offset="-3">大前天</button>
+    <button id="qTime">00:00:00</button>
+    <button id="qStats">计入统计</button>
+    <button id="qTags"># 标签</button>
+    <button id="qLocation">⌖ 位置</button>
+    <button id="qImage">▧ 图片</button>
+    <button id="qMood">☺ Mood</button>
+    <button id="qTemplate">⚡ 模板</button>
+  </div>
+
+  <div id="recordDetails" class="record-details hidden">
+    <label>账本<select id="recordLedger"></select></label>
+    <div class="field-row"><label>日期<input id="recordDate" type="date"></label><label>时间<input id="recordTime" type="time" step="1"></label></div>
+    <label>标签<input id="recordTags" placeholder="多个标签用逗号分隔"></label>
+    <div id="imagePreview" class="image-preview"></div>
+  </div>
+  <input id="recordImageInput" type="file" accept="image/*" multiple hidden>
+  <div class="amount-row"><textarea id="recordNote" placeholder="备注…"></textarea><div><span>¥</span><input id="recordAmount" value="0.00" readonly></div></div>
+  <div class="keypad">
+    <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button><button data-key="back">⌫</button>
+    <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button><button data-key="clear">清空</button>
+    <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button><button id="keyTag">#标签</button>
+    <button id="repeatSave">再记</button><button data-key="0">0</button><button data-key=".">.</button><button id="saveRecord" class="save-key">保存</button>
+  </div>
+  <div id="editRow" class="edit-row hidden"><button id="editRefund">退款</button><button id="editDelete">删除</button></div>
+</section>
+
+<section id="aiSheet" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head"><div><h2>✦ 快记</h2><p>文字、语音、截图、iOS 快捷指令统一进入账单解析。</p></div><button data-close="aiSheet" class="icon-btn">×</button></div>
+  <div class="ai-tabs"><button data-ai="text" class="active">⌨ 写一句</button><button data-ai="voice">🎙 说一句</button><button data-ai="image">▧ 截图</button><button data-ai="shortcut">↗ 快捷指令</button></div>
+  <div id="aiTextPane" class="ai-pane"><textarea id="aiText" placeholder="例如：昨天晚上和刘兴昊吃饭 68 元"></textarea><button id="parseAI">智能解析</button></div>
+  <div id="aiVoicePane" class="ai-pane hidden"><button id="startVoice" class="voice-big">🎙 开始说话</button><div id="voiceText"></div></div>
+  <div id="aiImagePane" class="ai-pane hidden"><label class="upload-box">选择支付截图<input id="aiImageInput" type="file" accept="image/*" hidden></label><img id="aiImagePreview" class="ai-image hidden"><textarea id="ocrText" placeholder="当前正式 PWA 已预留 OCR 入口；先粘贴/输入识别文字测试解析"></textarea><button id="parseOCR">解析截图文字</button></div>
+  <div id="aiShortcutPane" class="ai-pane hidden"><p>正式自动记账入口：磁贴/快捷指令把当前页面文字传入后，简账会<b>直接弹出可编辑记账窗口</b>，而不是先停在结果卡。</p><input id="shortcutText" value="微信支付\n瑞幸咖啡\n支付成功 ¥18.90\n22:13"><button id="parseShortcut">模拟磁贴自动记账</button></div>
+  <div id="aiCandidate" class="candidate hidden"></div>
+</section>
+
+
+<section id="autoTileSheet" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <div><h2>⚡ 自动记账磁贴</h2><p>磁贴 → 当前页面 → 识别 → 可编辑记账窗口</p></div>
+    <button data-close="autoTileSheet" class="icon-btn">×</button>
+  </div>
+  <div class="auto-flow">
+    <div><b>1</b><span>点击控制中心 / 桌面快捷指令磁贴</span></div>
+    <i>↓</i>
+    <div><b>2</b><span>获取“屏幕上的内容”；拿不到时由快捷指令截图 + OCR</span></div>
+    <i>↓</i>
+    <div><b>3</b><span>识别金额、收支、商户、分类、时间和备注</span></div>
+    <i>↓</i>
+    <div><b>4</b><span>直接弹出记账窗口，所有字段都可以修改</span></div>
+  </div>
+  <label class="field-block">模拟当前支付页面
+    <textarea id="tileSimText">微信支付
+瑞幸咖啡
+支付成功
+¥18.90
+2026-08-14 22:13</textarea>
+  </label>
+  <button id="simulateTile" class="primary-full">模拟点击磁贴</button>
+  <div class="permission-box">
+    <b>正式快捷指令入口</b><br>
+    部署到 HTTPS 后使用：<code>?autobook=1&amp;text=URL编码后的识别文字</code><br>
+    例如快捷指令先取得屏幕文字/OCR，再打开这个 URL。
+  </div>
+</section>
+
+<section id="locationSheet" class="sheet hidden">
+  <div class="sheet-handle"></div><div class="sheet-head"><h2>⌖ 位置</h2><button data-close="locationSheet" class="icon-btn">×</button></div>
+  <input id="locationName" class="full-input" placeholder="地点名称，例如：光谷天地">
+  <div id="locationStatus" class="permission-box">点击下方按钮，系统会请求定位权限。</div>
+  <button id="requestLocation" class="primary-full">允许定位并获取当前位置</button>
+  <div class="two-buttons"><button id="clearLocation">清除</button><button id="saveLocation">保存位置</button></div>
+</section>
+
+<section id="moodSheet" class="sheet hidden">
+  <div class="sheet-handle"></div><div class="sheet-head"><h2>☺ Mood</h2><button data-close="moodSheet" class="icon-btn">×</button></div>
+  <div class="mood-grid"><button data-mood="😄">😄<small>开心</small></button><button data-mood="🙂">🙂<small>不错</small></button><button data-mood="😌">😌<small>平静</small></button><button data-mood="🥰">🥰<small>幸福</small></button><button data-mood="🤩">🤩<small>兴奋</small></button><button data-mood="😐">😐<small>一般</small></button><button data-mood="😮‍💨">😮‍💨<small>疲惫</small></button><button data-mood="😔">😔<small>低落</small></button><button data-mood="😤">😤<small>生气</small></button><button data-mood="🥺">🥺<small>委屈</small></button></div>
+  <input id="customMood" class="full-input" placeholder="或输入文字 Mood">
+  <div class="two-buttons"><button id="clearMood">清除</button><button id="saveMood">保存</button></div>
+</section>
+
+<section id="dayEditSheet" class="sheet hidden">
+  <div class="sheet-handle"></div><div class="sheet-head"><h2>编辑日视图</h2><button data-close="dayEditSheet" class="icon-btn">×</button></div>
+  <input id="editDayTitle" class="full-input" placeholder="当天标题">
+  <input id="editDayMood" class="full-input" placeholder="当天 Mood">
+  <textarea id="editDayNote" class="full-textarea" placeholder="当天小记"></textarea>
+  <button id="saveDayMeta" class="primary-full">保存</button>
+</section>
+
+<section id="templateSheet" class="sheet hidden">
+  <div class="sheet-handle"></div><div class="sheet-head"><h2>⚡ 快捷模板</h2><button data-close="templateSheet" class="icon-btn">×</button></div>
+  <div id="templateManager"></div>
+  <h3 class="subheading">从当前日账单生成模板</h3>
+  <div id="templateSources"></div>
+</section>
+
+<section id="ledgerSheet" class="sheet hidden">
+  <div class="sheet-handle"></div><div class="sheet-head"><h2>账本管理</h2><button data-close="ledgerSheet" class="icon-btn">×</button></div>
+  <div id="ledgerManager"></div>
+  <div class="inline-form"><input id="newLedger" placeholder="新账本名称"><button id="addLedger">新增</button></div>
+</section>
+
+<section id="categorySheet" class="sheet hidden">
+  <div class="sheet-handle"></div><div class="sheet-head"><h2>分类管理</h2><button data-close="categorySheet" class="icon-btn">×</button></div>
+  <div class="seg category-manage-tabs"><button data-cat-type="expense" class="active">支出</button><button data-cat-type="income">收入</button></div>
+  <div id="categoryManager"></div>
+  <div class="inline-form"><input id="newCategory" placeholder="新增一级分类"><button id="addCategory">新增</button></div>
+</section>
+
+<div id="toast" class="toast hidden"></div>
+<div id="fatalError" class="fatal hidden"></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
