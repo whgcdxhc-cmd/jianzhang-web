@@ -118,12 +118,32 @@
       <div class="settings-list">
         <button id="manageLedgers">账本管理 <span>›</span></button>
         <button id="manageCategories">分类管理 <span>›</span></button>
+        <label class="settings-button">导入微信支付 Excel <input id="importWechat" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden><span>›</span></label>
+        <label class="settings-button">导入支付宝 CSV <input id="importAlipay" type="file" accept=".csv,text/csv" hidden><span>›</span></label>
         <button id="exportData">从云端导出 JSON 备份 <span>›</span></button>
         <label class="settings-button">导入 JSON 到云端 <input id="importData" type="file" accept="application/json" hidden><span>›</span></label>
         <button id="autoTileSettings">自动记账磁贴 <span>›</span></button>
         <button id="locationTest">测试定位权限 <span>›</span></button>
         <button id="installHelp">安装到桌面/主屏幕 <span>›</span></button>
         <a class="settings-button sign-out" href="/signout-with-chatgpt?return_to=/">退出云端账号 <span>›</span></a>
+      </div>
+      <div id="billImportStatus" class="import-status hidden" role="status"></div>
+      <div class="appearance-card">
+        <div class="panel-head"><div><h3>界面字体</h3><span>偏好随云端账号同步</span></div></div>
+        <label>字体风格
+          <select id="fontPreset">
+            <option value="clean">清爽黑体</option>
+            <option value="system">系统默认</option>
+            <option value="rounded">圆润字体</option>
+            <option value="serif">宋体阅读</option>
+            <option value="custom">自定义字体</option>
+          </select>
+        </label>
+        <label id="customFontRow" class="hidden">已安装字体名称
+          <input id="customFont" maxlength="100" placeholder="例如：霞鹜文楷、MiSans">
+        </label>
+        <p>自定义字体需要设备已经安装；不同手机可自动回退到系统中文字体。</p>
+        <button id="saveFont">保存字体设置</button>
       </div>
       <div id="systemInfo" class="system-info"></div>
     </section>

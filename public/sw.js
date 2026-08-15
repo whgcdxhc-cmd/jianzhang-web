@@ -1,10 +1,11 @@
-const CACHE = "jianzhang-0.3.0-cloud";
+const CACHE = "jianzhang-0.3.1-cloud-imports";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./parser.js",
+  "./importers.js",
   "./storage.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",

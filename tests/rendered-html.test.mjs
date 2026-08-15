@@ -12,7 +12,10 @@ function assertJianzhangContent(html) {
   assert.match(html, /只保存在你的云端账号中，不写入本机数据库/);
   assert.match(html, /placeholder="例如：这个月餐饮花了多少？"/);
   assert.match(html, /placeholder="例如：昨天晚上和朋友吃饭 68 元"/);
-  assert.doesNotMatch(html, /刘兴昊/);
+  assert.match(html, /id="importWechat"/);
+  assert.match(html, /id="importAlipay"/);
+  assert.match(html, /id="fontPreset"/);
+  assert.doesNotMatch(html, /\u5218\u5174\u660a/);
 }
 
 test("source and built pages use anonymous example copy", async () => {
@@ -31,9 +34,26 @@ test("service worker advances the cloud cache and never caches account data", as
     readFile(new URL("../dist/client/sw.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(sourceWorker, /jianzhang-0\.3\.0-cloud/);
+  assert.match(sourceWorker, /jianzhang-0\.3\.1-cloud-imports/);
+  assert.match(sourceWorker, /\.\/importers\.js/);
   assert.match(sourceWorker, /url\.pathname\.startsWith\("\/api\/cloud\/"\)/);
   assert.equal(builtWorker, sourceWorker);
+});
+
+test("bill importers and cloud-synced font settings are wired into the app", async () => {
+  const [app, importers, manifest] = await Promise.all([
+    readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/importers.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
+  ]);
+  assert.match(app, /parseWechatExcel,parseAlipayCsv/);
+  assert.match(app, /state\.settings=\{/);
+  assert.match(importers, /TextDecoder\("gb18030"\)/);
+  assert.match(importers, /DecompressionStream\("deflate-raw"\)/);
+  const parsedManifest = JSON.parse(manifest);
+  assert.equal(parsedManifest.id, "/");
+  assert.equal(parsedManifest.start_url, "/");
+  assert.equal(parsedManifest.scope, "/");
 });
 
 test("storage writes authoritative state only through the cloud API", async () => {

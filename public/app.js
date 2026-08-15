@@ -1,5 +1,6 @@
 import {loadState,saveState,exportCloudState,importCloudState,getCloudStatus,CloudStorageError} from "./storage.js";
 import {parseBookkeepingText} from "./parser.js";
+import {parseWechatExcel,parseAlipayCsv} from "./importers.js";
 
 const $=id=>document.getElementById(id);
 const $$=sel=>Array.from(document.querySelectorAll(sel));
@@ -13,9 +14,15 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 
 const ICONS={"餐饮":"🍴","交通":"🚌","购物":"🛍","旅行":"🌴","话费网费":"☎","学习":"📚","医疗":"⚕","娱乐":"🎬","人情":"🧧","居住":"🏠","运动":"🏃","运费":"📦","工资":"💼","兼职":"🧑‍💻","退款/报销":"↩","家庭":"🏡","其他":"◈","早餐":"🥣","午餐":"🍱","晚餐":"🍲","夜宵":"🌙","咖啡":"☕","零食":"🍪","地铁":"🚇","公交":"🚌","打车":"🚕","高铁":"🚄","住宿":"🏨","门票":"🎫","红包":"🧧","转账":"💸"};
 const iconFor=n=>ICONS[n]||"◈";
+const FONT_PRESETS={
+  clean:'"MiSans","HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif',
+  system:'-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif',
+  rounded:'"SF Pro Rounded","Arial Rounded MT Bold","PingFang SC","Microsoft YaHei",sans-serif',
+  serif:'"Songti SC","STSong","Noto Serif CJK SC","SimSun",serif'
+};
 
 const defaultState={
-  version:"0.2.0",
+  version:"0.3.0",
   currentLedgerId:"life",
   ledgers:[{id:"life",name:"生活账本"},{id:"travel",name:"旅游账本"}],
   categories:{
@@ -43,7 +50,7 @@ const defaultState={
       {id:"other-i",name:"其他",children:[]}
     ]
   },
-  records:[],templates:[],dayMeta:{},dayBackgrounds:{}
+  records:[],templates:[],dayMeta:{},dayBackgrounds:{},settings:{fontPreset:"clean",customFont:""}
 };
 
 let state=clone(defaultState);
@@ -57,6 +64,7 @@ function normalize(s){
   x.records=Array.isArray(x.records)?x.records:[];
   x.templates=Array.isArray(x.templates)?x.templates:[];
   x.dayMeta=x.dayMeta||{};x.dayBackgrounds=x.dayBackgrounds||{};
+  x.settings={...defaultState.settings,...(x.settings||{})};
   x.records=x.records.map(r=>({...r,id:r.id||uid("r"),tags:Array.isArray(r.tags)?r.tags:[],images:Array.isArray(r.images)?r.images:[],location:r.location||null,mood:r.mood||"",exclude:!!(r.exclude??(r.type==="income"?r.excludeIncome:r.excludeExpense)),time:(r.time||"12:00:00").length===5?r.time+":00":r.time||"12:00:00"}));
   return x;
 }
@@ -78,6 +86,13 @@ async function persist(){
   }
 }
 function currentLedger(){return state.ledgers.find(x=>x.id===state.currentLedgerId)||state.ledgers[0]}
+function applyFont(){
+  const preset=FONT_PRESETS[state.settings?.fontPreset]||FONT_PRESETS.clean;
+  const custom=String(state.settings?.customFont||"").replace(/[;{}]/g,"").trim();
+  const family=state.settings?.fontPreset==="custom"&&custom?`"${custom.replace(/["']/g,"")}",${FONT_PRESETS.system}`:preset;
+  document.documentElement.style.setProperty("--app-font",family);
+  if($("fontPreset")){$("fontPreset").value=state.settings?.fontPreset||"clean";$("customFont").value=state.settings?.customFont||"";$("customFontRow").classList.toggle("hidden",$("fontPreset").value!=="custom")}
+}
 function cat(type,id){return (state.categories[type]||[]).find(x=>x.id===id)}
 function categoryText(r){const c=cat(r.type,r.primaryId);return (c?.name||"未分类")+(r.secondary?" · "+r.secondary:"")}
 function parseDT(r){return new Date(`${r.date}T${r.time||"12:00:00"}`)}
@@ -310,7 +325,25 @@ async function action(e){
 }
 
 function renderSystemInfo(){const cloud=getCloudStatus(),account=cloud.account?.email||"未登录";$('accountLabel').textContent=account;$('cloudAccountButton').textContent=cloud.account?.displayName||"云端";$('cloudSyncStatus').textContent=document.body.dataset.sync==="error"?"保存失败":document.body.dataset.sync==="syncing"?"同步中":"已同步";$('cloudSyncStatus').classList.toggle("sync-error",document.body.dataset.sync==="error");$("systemInfo").innerHTML=`数据存储：简账云端（本机不保存正式账单）<br>云端账号：${esc(account)}<br>最近同步：${cloud.updatedAt?esc(new Date(cloud.updatedAt).toLocaleString("zh-CN")):"尚未写入"}<br>安全上下文：${window.isSecureContext?"是，可申请定位权限":"否，定位等权限会受限"}<br>PWA Service Worker：${"serviceWorker" in navigator?"支持":"不支持"}<br>当前账本：${esc(currentLedger().name)}`}
-function renderAll(){renderHome();renderRecords();renderStats();renderWeek();renderSystemInfo();$("ledgerSwitch").textContent=currentLedger().name+"⌄"}
+function renderAll(){applyFont();renderHome();renderRecords();renderStats();renderWeek();renderSystemInfo();$("ledgerSwitch").textContent=currentLedger().name+"⌄"}
+
+function knownTags(){return [...new Set(state.records.flatMap(record=>record.tags||[]))]}
+async function importBillFile(file,parser,label){
+  if(!file)return;
+  const status=$("billImportStatus");status.classList.remove("hidden");status.textContent=`正在读取${label}…`;
+  try{
+    const result=await parser(file,{categories:state.categories,knownTags:knownTags(),ledgerId:state.currentLedgerId});
+    const existingKeys=new Set(state.records.map(record=>record.provider&&record.externalId?`${record.provider}:${record.externalId}`:record.id));
+    const additions=[];let duplicates=0;
+    for(const record of result.records){const key=record.provider&&record.externalId?`${record.provider}:${record.externalId}`:record.id;if(existingKeys.has(key)){duplicates+=1;continue}existingKeys.add(key);additions.push(record)}
+    if(!additions.length){status.textContent=`${label}没有新增流水；已跳过 ${duplicates} 条重复记录。`;showToast("没有需要新增的流水");return}
+    if(!confirm(`${label}识别到 ${additions.length} 条新流水，${result.excluded} 条将不计入统计。确认导入当前账本吗？`)){status.textContent="已取消导入";return}
+    state.records.push(...additions);
+    if(!await persist()){state.records=state.records.filter(record=>!additions.some(item=>item.id===record.id));throw new Error("云端保存失败，未完成导入")}
+    status.textContent=`${label}导入完成：新增 ${additions.length} 条，重复 ${duplicates} 条，无效/关闭 ${result.skipped} 条，不计入统计 ${result.excluded} 条。`;
+    showToast(`${label}已导入 ${additions.length} 条`)
+  }catch(err){console.error(err);status.textContent=`${label}导入失败：${err?.message||"文件格式无效"}`;showToast(`${label}导入失败`)}
+}
 
 function bind(){
   document.addEventListener("click",action);$("cloudAccountButton").onclick=()=>navigate("settings");
@@ -335,6 +368,10 @@ function bind(){
   $("addLedger").onclick=async()=>{const v=$("newLedger").value.trim();if(v){state.ledgers.push({id:uid("ledger"),name:v});$("newLedger").value="";await persist();renderLedgerManager()}};
   $("manageCategories").onclick=()=>{renderCategoryManager();openSheet("categorySheet")};$$("[data-cat-type]").forEach(b=>b.onclick=()=>{categoryManageType=b.dataset.catType;renderCategoryManager()});$("categoryManager").onclick=async e=>{const rr=e.target.closest("[data-cat-rename]"),ch=e.target.closest("[data-cat-children]"),del=e.target.closest("[data-cat-delete]");if(rr){const c=cat(categoryManageType,rr.dataset.catRename),v=prompt("分类名称",c.name);if(v){c.name=v.trim();await persist();renderCategoryManager()}}if(ch){const c=cat(categoryManageType,ch.dataset.catChildren),v=prompt("二级分类，用逗号分隔",c.children.join(","));if(v!==null){c.children=v.split(/[,，]/).map(x=>x.trim()).filter(Boolean);await persist();renderCategoryManager()}}if(del&&confirm("删除这个分类？")){state.categories[categoryManageType]=state.categories[categoryManageType].filter(c=>c.id!==del.dataset.catDelete);await persist();renderCategoryManager()}};
   $("addCategory").onclick=async()=>{const v=$("newCategory").value.trim();if(v){state.categories[categoryManageType].push({id:uid("cat"),name:v,children:[]});$("newCategory").value="";await persist();renderCategoryManager()}};
+  $("importWechat").onchange=async e=>{const file=e.target.files?.[0];await importBillFile(file,parseWechatExcel,"微信账单");e.target.value=""};
+  $("importAlipay").onchange=async e=>{const file=e.target.files?.[0];await importBillFile(file,parseAlipayCsv,"支付宝账单");e.target.value=""};
+  $("fontPreset").onchange=()=>{$("customFontRow").classList.toggle("hidden",$("fontPreset").value!=="custom")};
+  $("saveFont").onclick=async()=>{const preset=$("fontPreset").value,custom=$("customFont").value.trim();if(preset==="custom"&&!custom)return showToast("请填写已安装字体名称");state.settings={...(state.settings||{}),fontPreset:preset,customFont:custom};applyFont();if(await persist())showToast("字体设置已保存")};
   $$("[data-ai]").forEach(b=>b.onclick=()=>switchAI(b.dataset.ai));$("parseAI").onclick=async()=>showCandidate(await parseNatural($("aiText").value,"文字"));$("startVoice").onclick=startVoice;$("aiImageInput").onchange=e=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{$("aiImagePreview").src=rd.result;$("aiImagePreview").classList.remove("hidden")};rd.readAsDataURL(f)};$("parseOCR").onclick=async()=>showCandidate(await parseNatural($("ocrText").value,"截图 OCR"));$("parseShortcut").onclick=async()=>handleAutoBook($("shortcutText").value,"iOS 快捷指令磁贴");
   $("exportData").onclick=async()=>{try{showToast("正在从云端生成备份…");const backup=await exportCloudState(),blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`简账云端备份_${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);showToast("云端备份已导出")}catch(err){showToast(err?.message||"导出失败")}};$("importData").onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const backup=JSON.parse(await f.text());if(!confirm("导入会覆盖当前云端账本，确定继续？"))return;state=normalize(await importCloudState(backup));renderAll();showToast("已导入云端")}catch(err){showToast(err?.message||"备份文件无效")}finally{e.target.value=""}};
   $("autoTileSettings").onclick=()=>openSheet("autoTileSheet");
