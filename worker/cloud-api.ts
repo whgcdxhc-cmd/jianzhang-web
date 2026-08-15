@@ -227,6 +227,11 @@ async function externalizeStateImages(
     );
   }
 
+  const ledgers = Array.isArray(state.ledgers) ? state.ledgers : [];
+  for (const ledger of ledgers) {
+    if (isObject(ledger) && ledger.cover) ledger.cover = await externalizeImage(ledger.cover, userId, env);
+  }
+
   if (isObject(state.dayBackgrounds)) {
     for (const [date, value] of Object.entries(state.dayBackgrounds)) {
       state.dayBackgrounds[date] = await externalizeImage(value, userId, env);
@@ -247,6 +252,10 @@ async function hydrateStateImages(
     item.images = await Promise.all(
       item.images.map((value) => hydrateImage(value, userId, env)),
     );
+  }
+  const ledgers = Array.isArray(state.ledgers) ? state.ledgers : [];
+  for (const ledger of ledgers) {
+    if (isObject(ledger) && ledger.cover) ledger.cover = await hydrateImage(ledger.cover, userId, env);
   }
   if (isObject(state.dayBackgrounds)) {
     for (const [date, value] of Object.entries(state.dayBackgrounds)) {

@@ -15,6 +15,8 @@ function assertJianzhangContent(html) {
   assert.match(html, /id="importWechat"/);
   assert.match(html, /id="importAlipay"/);
   assert.match(html, /id="fontPreset"/);
+  assert.match(html, /id="themePreset"/);
+  assert.match(html, /id="ledgerCoverInput"/);
   assert.doesNotMatch(html, /\u5218\u5174\u660a/);
 }
 
@@ -34,7 +36,7 @@ test("service worker advances the cloud cache and never caches account data", as
     readFile(new URL("../dist/client/sw.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(sourceWorker, /jianzhang-0\.3\.1-cloud-imports/);
+  assert.match(sourceWorker, /jianzhang-0\.3\.2-themes-covers/);
   assert.match(sourceWorker, /\.\/importers\.js/);
   assert.match(sourceWorker, /url\.pathname\.startsWith\("\/api\/cloud\/"\)/);
   assert.equal(builtWorker, sourceWorker);
@@ -122,7 +124,7 @@ test("authenticated cloud state round-trips through D1 and R2", async () => {
     "oai-authenticated-user-email": "test@example.com",
   };
   const state = {
-    ledgers: [{ id: "life", name: "生活账本" }],
+    ledgers: [{ id: "life", name: "生活账本", cover: "data:image/png;base64,aGk=" }],
     records: [{ id: "r1", images: ["data:image/png;base64,aGk="] }],
     dayBackgrounds: {},
   };
@@ -144,6 +146,7 @@ test("authenticated cloud state round-trips through D1 and R2", async () => {
   const saved = await saveResponse.json();
   assert.equal(saved.revision, 1);
   assert.match(saved.state.records[0].images[0], /^\/api\/cloud\/file\?key=/);
+  assert.match(saved.state.ledgers[0].cover, /^\/api\/cloud\/file\?key=/);
   assert.equal(files.objects.size, 1);
 
   const accountResponse = await worker.fetch(
@@ -163,6 +166,7 @@ test("authenticated cloud state round-trips through D1 and R2", async () => {
   const backup = await exportResponse.json();
   assert.equal(backup.format, "jianzhang-cloud-backup");
   assert.equal(backup.state.records[0].images[0], "data:image/png;base64,aGk=");
+  assert.equal(backup.state.ledgers[0].cover, "data:image/png;base64,aGk=");
 });
 
 class MockD1 {

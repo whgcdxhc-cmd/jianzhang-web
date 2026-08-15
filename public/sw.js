@@ -1,4 +1,4 @@
-const CACHE = "jianzhang-0.3.1-cloud-imports";
+const CACHE = "jianzhang-0.3.2-themes-covers";
 const ASSETS = [
   "./",
   "./index.html",

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -130,6 +130,12 @@
       <div id="billImportStatus" class="import-status hidden" role="status"></div>
       <div class="appearance-card">
         <div class="panel-head"><div><h3>界面字体</h3><span>偏好随云端账号同步</span></div></div>
+        <label>背景主题
+          <select id="themePreset">
+            <option value="dark">深色</option>
+            <option value="light">浅色</option>
+          </select>
+        </label>
         <label>字体风格
           <select id="fontPreset">
             <option value="clean">清爽黑体</option>
@@ -283,6 +289,7 @@
 <section id="ledgerSheet" class="sheet hidden">
   <div class="sheet-handle"></div><div class="sheet-head"><h2>账本管理</h2><button data-close="ledgerSheet" class="icon-btn">×</button></div>
   <div id="ledgerManager"></div>
+  <input id="ledgerCoverInput" type="file" accept="image/*" hidden>
   <div class="inline-form"><input id="newLedger" placeholder="新账本名称"><button id="addLedger">新增</button></div>
 </section>
 
