@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.jianzhang.ledger",
+      "sha256_cert_fingerprints": [
+        "93:61:25:2B:7A:60:B8:E7:4A:5F:A4:CE:5E:5E:B6:07:8B:67:1D:D3:38:48:DA:48:D6:BC:A5:F8:37:9A:4F:28"
+      ]
+    }
+  }
+]
