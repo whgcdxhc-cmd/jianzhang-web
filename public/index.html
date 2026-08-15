@@ -52,7 +52,7 @@
     <section id="page-stats" class="page">
       <div class="section-head"><h2>搜索与分析</h2></div>
       <div class="search-panel">
-        <div class="search-box"><input id="semanticInput" placeholder="例如：这个月和刘兴昊吃饭花了多少？"><button id="semanticBtn">查询</button></div>
+        <div class="search-box"><input id="semanticInput" placeholder="例如：这个月餐饮花了多少？"><button id="semanticBtn">查询</button></div>
         <div class="search-examples">
           <button data-query="本月餐饮支出">本月餐饮</button>
           <button data-query="本周咖啡支出">本周咖啡</button>
@@ -180,7 +180,7 @@
   <div class="sheet-handle"></div>
   <div class="sheet-head"><div><h2>✦ 快记</h2><p>文字、语音、截图、iOS 快捷指令统一进入账单解析。</p></div><button data-close="aiSheet" class="icon-btn">×</button></div>
   <div class="ai-tabs"><button data-ai="text" class="active">⌨ 写一句</button><button data-ai="voice">🎙 说一句</button><button data-ai="image">▧ 截图</button><button data-ai="shortcut">↗ 快捷指令</button></div>
-  <div id="aiTextPane" class="ai-pane"><textarea id="aiText" placeholder="例如：昨天晚上和刘兴昊吃饭 68 元"></textarea><button id="parseAI">智能解析</button></div>
+  <div id="aiTextPane" class="ai-pane"><textarea id="aiText" placeholder="例如：昨天晚上和朋友吃饭 68 元"></textarea><button id="parseAI">智能解析</button></div>
   <div id="aiVoicePane" class="ai-pane hidden"><button id="startVoice" class="voice-big">🎙 开始说话</button><div id="voiceText"></div></div>
   <div id="aiImagePane" class="ai-pane hidden"><label class="upload-box">选择支付截图<input id="aiImageInput" type="file" accept="image/*" hidden></label><img id="aiImagePreview" class="ai-image hidden"><textarea id="ocrText" placeholder="当前正式 PWA 已预留 OCR 入口；先粘贴/输入识别文字测试解析"></textarea><button id="parseOCR">解析截图文字</button></div>
   <div id="aiShortcutPane" class="ai-pane hidden"><p>正式自动记账入口：磁贴/快捷指令把当前页面文字传入后，简账会<b>直接弹出可编辑记账窗口</b>，而不是先停在结果卡。</p><input id="shortcutText" value="微信支付\n瑞幸咖啡\n支付成功 ¥18.90\n22:13"><button id="parseShortcut">模拟磁贴自动记账</button></div>
