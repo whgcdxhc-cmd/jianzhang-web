@@ -1,4 +1,4 @@
-import {loadState,saveState} from "./storage.js";
+import {loadState,saveState,exportCloudState,importCloudState,getCloudStatus,CloudStorageError} from "./storage.js";
 import {parseBookkeepingText} from "./parser.js";
 
 const $=id=>document.getElementById(id);
@@ -60,7 +60,23 @@ function normalize(s){
   x.records=x.records.map(r=>({...r,id:r.id||uid("r"),tags:Array.isArray(r.tags)?r.tags:[],images:Array.isArray(r.images)?r.images:[],location:r.location||null,mood:r.mood||"",exclude:!!(r.exclude??(r.type==="income"?r.excludeIncome:r.excludeExpense)),time:(r.time||"12:00:00").length===5?r.time+":00":r.time||"12:00:00"}));
   return x;
 }
-async function persist(){await saveState(state);renderAll()}
+async function persist(){
+  document.body.dataset.sync="syncing";
+  try{
+    state=normalize(await saveState(state));
+    document.body.dataset.sync="saved";
+    renderAll();
+    return true
+  }catch(err){
+    console.error(err);
+    document.body.dataset.sync="error";
+    if(err?.code==="REVISION_CONFLICT"){
+      try{state=normalize(await loadState());renderAll()}catch(loadErr){console.error(loadErr)}
+    }
+    showToast(err?.message||"未保存到云端，请检查网络");
+    return false
+  }
+}
 function currentLedger(){return state.ledgers.find(x=>x.id===state.currentLedgerId)||state.ledgers[0]}
 function cat(type,id){return (state.categories[type]||[]).find(x=>x.id===id)}
 function categoryText(r){const c=cat(r.type,r.primaryId);return (c?.name||"未分类")+(r.secondary?" · "+r.secondary:"")}
@@ -293,11 +309,11 @@ async function action(e){
   if(b.dataset.act){const r=state.records.find(x=>x.id===b.dataset.id);if(!r)return;if(b.dataset.act==="repeat")openRecord(r,true);if(b.dataset.act==="edit")openRecord(r);if(b.dataset.act==="delete"){if(confirm("确定删除这笔账单？")){state.records=state.records.filter(x=>x.id!==r.id);await persist()}}if(b.dataset.act==="refund"){const v=prompt("退款金额",r.amount);if(v&&Number(v)>0){const type=r.type==="expense"?"income":"expense",c=type==="income"?cat("income","refund-i"):cat("expense","other-e");state.records.push({id:uid("refund"),ledgerId:r.ledgerId,type,amount:Number(v),date:today(),time:nowTime(),primaryId:c?.id||"",secondary:type==="income"?"退款":"",tags:[...(r.tags||[]),"退款"],note:"退款："+(r.note||categoryText(r)),exclude:false,location:null,images:[],mood:"",createdAt:Date.now(),updatedAt:Date.now(),refundOf:r.id});await persist()}}}
 }
 
-function renderSystemInfo(){$("systemInfo").innerHTML=`数据存储：IndexedDB<br>安全上下文：${window.isSecureContext?"是，可申请定位权限":"否，定位等权限会受限"}<br>PWA Service Worker：${"serviceWorker" in navigator?"支持":"不支持"}<br>当前账本：${esc(currentLedger().name)}`}
+function renderSystemInfo(){const cloud=getCloudStatus(),account=cloud.account?.email||"未登录";$('accountLabel').textContent=account;$('cloudAccountButton').textContent=cloud.account?.displayName||"云端";$('cloudSyncStatus').textContent=document.body.dataset.sync==="error"?"保存失败":document.body.dataset.sync==="syncing"?"同步中":"已同步";$('cloudSyncStatus').classList.toggle("sync-error",document.body.dataset.sync==="error");$("systemInfo").innerHTML=`数据存储：简账云端（本机不保存正式账单）<br>云端账号：${esc(account)}<br>最近同步：${cloud.updatedAt?esc(new Date(cloud.updatedAt).toLocaleString("zh-CN")):"尚未写入"}<br>安全上下文：${window.isSecureContext?"是，可申请定位权限":"否，定位等权限会受限"}<br>PWA Service Worker：${"serviceWorker" in navigator?"支持":"不支持"}<br>当前账本：${esc(currentLedger().name)}`}
 function renderAll(){renderHome();renderRecords();renderStats();renderWeek();renderSystemInfo();$("ledgerSwitch").textContent=currentLedger().name+"⌄"}
 
 function bind(){
-  document.addEventListener("click",action);
+  document.addEventListener("click",action);$("cloudAccountButton").onclick=()=>navigate("settings");
   $$("[data-nav]").forEach(b=>b.onclick=()=>navigate(b.dataset.nav));$("homeAdd").onclick=$("navAdd").onclick=()=>openRecord();$("homeAI").onclick=()=>openSheet("aiSheet");$("openSettings").onclick=()=>navigate("settings");$("ledgerSwitch").onclick=()=>{renderLedgerManager();openSheet("ledgerSheet")};
   $$("[data-close]").forEach(b=>b.onclick=()=>closeSheet(b.dataset.close));$("backdrop").onclick=closeAll;
   $$("[data-type]").forEach(b=>b.onclick=()=>{rec.type=b.dataset.type;rec.primaryId=(state.categories[rec.type]||[])[0]?.id||"";rec.secondary="";updateRecordUI()});
@@ -320,7 +336,7 @@ function bind(){
   $("manageCategories").onclick=()=>{renderCategoryManager();openSheet("categorySheet")};$$("[data-cat-type]").forEach(b=>b.onclick=()=>{categoryManageType=b.dataset.catType;renderCategoryManager()});$("categoryManager").onclick=async e=>{const rr=e.target.closest("[data-cat-rename]"),ch=e.target.closest("[data-cat-children]"),del=e.target.closest("[data-cat-delete]");if(rr){const c=cat(categoryManageType,rr.dataset.catRename),v=prompt("分类名称",c.name);if(v){c.name=v.trim();await persist();renderCategoryManager()}}if(ch){const c=cat(categoryManageType,ch.dataset.catChildren),v=prompt("二级分类，用逗号分隔",c.children.join(","));if(v!==null){c.children=v.split(/[,，]/).map(x=>x.trim()).filter(Boolean);await persist();renderCategoryManager()}}if(del&&confirm("删除这个分类？")){state.categories[categoryManageType]=state.categories[categoryManageType].filter(c=>c.id!==del.dataset.catDelete);await persist();renderCategoryManager()}};
   $("addCategory").onclick=async()=>{const v=$("newCategory").value.trim();if(v){state.categories[categoryManageType].push({id:uid("cat"),name:v,children:[]});$("newCategory").value="";await persist();renderCategoryManager()}};
   $$("[data-ai]").forEach(b=>b.onclick=()=>switchAI(b.dataset.ai));$("parseAI").onclick=async()=>showCandidate(await parseNatural($("aiText").value,"文字"));$("startVoice").onclick=startVoice;$("aiImageInput").onchange=e=>{const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{$("aiImagePreview").src=rd.result;$("aiImagePreview").classList.remove("hidden")};rd.readAsDataURL(f)};$("parseOCR").onclick=async()=>showCandidate(await parseNatural($("ocrText").value,"截图 OCR"));$("parseShortcut").onclick=async()=>handleAutoBook($("shortcutText").value,"iOS 快捷指令磁贴");
-  $("exportData").onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`简账备份_${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};$("importData").onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{state=normalize(JSON.parse(await f.text()));await persist();showToast("导入成功")}catch{showToast("备份文件无效")}e.target.value=""};
+  $("exportData").onclick=async()=>{try{showToast("正在从云端生成备份…");const backup=await exportCloudState(),blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`简账云端备份_${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);showToast("云端备份已导出")}catch(err){showToast(err?.message||"导出失败")}};$("importData").onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{const backup=JSON.parse(await f.text());if(!confirm("导入会覆盖当前云端账本，确定继续？"))return;state=normalize(await importCloudState(backup));renderAll();showToast("已导入云端")}catch(err){showToast(err?.message||"备份文件无效")}finally{e.target.value=""}};
   $("autoTileSettings").onclick=()=>openSheet("autoTileSheet");
   $("simulateTile").onclick=async()=>handleAutoBook($("tileSimText").value,"磁贴模拟");
   $("showRawCapture").onclick=()=>$("rawCaptureBox").classList.toggle("hidden");
@@ -331,12 +347,14 @@ function bind(){
 async function init(){
   try{
     state=normalize(await loadState());
+    document.body.dataset.sync="saved";
     $("statsDate").value=today();$("dayDate").value=today();
     bind();renderAll();
     if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("./sw.js").catch(()=>{});
     const qp=new URLSearchParams(location.search),autoText=qp.has("text")?qp.get("text"):(qp.get("quick")||""),isAuto=qp.get("autobook")==="1"||qp.has("quick");
     if(isAuto)setTimeout(()=>handleAutoBook(autoText,"iOS 快捷指令磁贴"),180);
-  }catch(err){console.error(err);$("fatalError").classList.remove("hidden");$("fatalError").textContent="简账启动失败\n\n"+(err?.stack||err)}
+  }catch(err){console.error(err);if(err instanceof CloudStorageError&&err.code==="AUTH_REQUIRED"){showAuthGate();return}$("fatalError").classList.remove("hidden");$("fatalError").textContent="简账启动失败\n\n"+(err?.message||err)}
 }
+function showAuthGate(){document.body.classList.add("auth-required");$("authGate").classList.remove("hidden");const returnTo=location.pathname+location.search+location.hash;$("authLogin").href=`/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`}
 window.addEventListener("error",e=>{console.error(e.error||e.message)});
 init();
