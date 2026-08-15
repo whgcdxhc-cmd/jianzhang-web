@@ -1,0 +1,51 @@
+{
+  "packageId": "com.jianzhang.ledger",
+  "host": "jianzhang-ledger.whgcdxhc.chatgpt.site",
+  "name": "简账",
+  "launcherName": "简账",
+  "display": "standalone",
+  "themeColor": "#121417",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#121417",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://jianzhang-ledger.whgcdxhc.chatgpt.site/icons/icon-512.png",
+  "maskableIconUrl": "https://jianzhang-ledger.whgcdxhc.chatgpt.site/icons/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "android.keystore",
+    "alias": "jianzhang"
+  },
+  "appVersionName": "1",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://jianzhang-ledger.whgcdxhc.chatgpt.site/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://jianzhang-ledger.whgcdxhc.chatgpt.site/",
+  "minSdkVersion": 21,
+  "orientation": "portrait-primary",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
+}

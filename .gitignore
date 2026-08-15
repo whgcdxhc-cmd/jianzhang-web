@@ -38,3 +38,12 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# Android local build and signing artifacts
+/android/.gradle/
+/android/**/build/
+/android/local.properties
+/android/*.keystore
+/android/*.jks
+/android/*.apk
+/android/*.aab
