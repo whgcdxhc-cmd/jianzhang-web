@@ -17,6 +17,9 @@ function assertJianzhangContent(html) {
   assert.match(html, /id="fontPreset"/);
   assert.match(html, /id="themePreset"/);
   assert.match(html, /id="ledgerCoverInput"/);
+  assert.match(html, /id="budgetCard"/);
+  assert.match(html, /id="searchPanel" class="search-panel hidden"/);
+  assert.ok(html.indexOf('id="barChart"') < html.indexOf('id="pieChart"'));
   assert.doesNotMatch(html, /\u5218\u5174\u660a/);
 }
 
@@ -36,7 +39,7 @@ test("service worker advances the cloud cache and never caches account data", as
     readFile(new URL("../dist/client/sw.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(sourceWorker, /jianzhang-0\.3\.2-themes-covers/);
+  assert.match(sourceWorker, /jianzhang-0\.3\.3-budget-view/);
   assert.match(sourceWorker, /\.\/importers\.js/);
   assert.match(sourceWorker, /url\.pathname\.startsWith\("\/api\/cloud\/"\)/);
   assert.equal(builtWorker, sourceWorker);

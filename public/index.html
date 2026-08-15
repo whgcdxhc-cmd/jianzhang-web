@@ -60,8 +60,8 @@
     </section>
 
     <section id="page-stats" class="page">
-      <div class="section-head"><h2>搜索与分析</h2></div>
-      <div class="search-panel">
+      <div class="section-head"><h2>视图</h2><button id="toggleSearch" class="compact-search">⌕ 搜索</button></div>
+      <div id="searchPanel" class="search-panel hidden">
         <div class="search-box"><input id="semanticInput" placeholder="例如：这个月餐饮花了多少？"><button id="semanticBtn">查询</button></div>
         <div class="search-examples">
           <button data-query="本月餐饮支出">本月餐饮</button>
@@ -76,8 +76,9 @@
         <input id="statsDate" type="date">
       </div>
       <div class="metrics3"><div><span>收入</span><strong id="statsIncome" class="income">¥0.00</strong></div><div><span>支出</span><strong id="statsExpense" class="expense">¥0.00</strong></div><div><span>结余</span><strong id="statsBalance">¥0.00</strong></div></div>
-      <div class="panel"><div class="panel-head"><h3>收支类型</h3><span>饼状图</span></div><div id="pieChart" class="pie-wrap"></div></div>
+      <div id="budgetCard" class="budget-card"></div>
       <div class="panel"><div class="panel-head"><h3>收支趋势</h3><span>柱状图</span></div><div id="barChart" class="bars"></div></div>
+      <div class="panel"><div class="panel-head"><h3>收支类型</h3><span>饼状图</span></div><div id="pieChart" class="pie-wrap"></div></div>
       <div class="panel"><div class="panel-head"><h3>分类支出</h3></div><div id="categoryRank"></div></div>
       <div class="panel"><div class="panel-head"><h3>日报表</h3></div><div id="dailyReport"></div></div>
     </section>
@@ -298,6 +299,14 @@
   <div class="seg category-manage-tabs"><button data-cat-type="expense" class="active">支出</button><button data-cat-type="income">收入</button></div>
   <div id="categoryManager"></div>
   <div class="inline-form"><input id="newCategory" placeholder="新增一级分类"><button id="addCategory">新增</button></div>
+</section>
+
+<section id="budgetSheet" class="sheet hidden">
+  <div class="sheet-handle"></div><div class="sheet-head"><div><h2>月预算</h2><p>当前账本独立设置，金额为 0 表示不限制。</p></div><button data-close="budgetSheet" class="icon-btn">×</button></div>
+  <label class="field-block">每月总预算<input id="monthlyBudget" class="full-input" type="number" min="0" step="100" inputmode="decimal" placeholder="例如 5000"></label>
+  <h3 class="subheading">分类预算</h3>
+  <div id="categoryBudgetEditor" class="budget-editor"></div>
+  <button id="saveBudget" class="primary-full">保存预算</button>
 </section>
 
 <div id="toast" class="toast hidden"></div>
