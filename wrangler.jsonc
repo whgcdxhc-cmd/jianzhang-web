@@ -8,14 +8,14 @@
     {
       "binding": "DB",
       "database_name": "jianzhang-db",
-      "database_id": "00000000-0000-4000-8000-000000000000",
+      "database_id": "41808220-addf-40c4-a267-70e6a5ea1523",
       "migrations_dir": "./drizzle"
     }
   ],
-  "r2_buckets": [
+  "kv_namespaces": [
     {
-      "binding": "FILES",
-      "bucket_name": "jianzhang-files"
+      "binding": "MEDIA",
+      "id": "cdb8e242d84147a3af215ef303902894"
     }
   ],
   "observability": { "enabled": true }

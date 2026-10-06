@@ -22,9 +22,9 @@
 - 独立账号：`worker/auth.ts`
 - 云端账本与图片接口：`worker/cloud-api.ts`
 - 数据库结构和迁移：`db/`、`drizzle/`
-- 部署：Cloudflare Workers + D1 + R2
+- 部署：Cloudflare Workers + D1 + KV（兼容 R2）
 
-正式账单只保存到 D1/R2；浏览器里的旧 IndexedDB 数据只用于一次性迁移，迁移成功后会删除。
+正式账单只保存到 D1/KV；浏览器里的旧 IndexedDB 数据只用于一次性迁移，迁移成功后会删除。
 
 ## 本地开发
 
@@ -54,7 +54,7 @@ npm test
 1. `npx wrangler login`
 2. `npx wrangler d1 create jianzhang-db`
 3. 把返回的 D1 `database_id` 写入 `wrangler.jsonc`
-4. `npx wrangler r2 bucket create jianzhang-files`
+4. `npx wrangler kv namespace create jianzhang-media`，把返回的 KV `id` 写入 `wrangler.jsonc`
 5. `npx wrangler d1 migrations apply jianzhang-db --remote --config wrangler.jsonc`
 6. `npm run build`
 7. `npx wrangler deploy --config dist/server/wrangler.json`

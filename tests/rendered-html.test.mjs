@@ -152,7 +152,7 @@ test("independent account registration creates a secure session", async () => {
   assert.equal(session.account.displayName, "小简");
 });
 
-test("authenticated cloud state round-trips through D1 and R2", async () => {
+test("authenticated cloud state round-trips through D1 and R2 compatibility", async () => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("cloud-test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
@@ -207,6 +207,54 @@ test("authenticated cloud state round-trips through D1 and R2", async () => {
   assert.equal(backup.format, "jianzhang-cloud-backup");
   assert.equal(backup.state.records[0].images[0], "data:image/png;base64,aGk=");
   assert.equal(backup.state.ledgers[0].cover, "data:image/png;base64,aGk=");
+});
+
+test("cloud images use KV when R2 is not enabled", async () => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("kv-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const db = new MockD1();
+  const media = new MockKV();
+  const env = { DB: db, MEDIA: media };
+  const authHeaders = {
+    "oai-authenticated-user-id": "kv-user",
+    "oai-authenticated-user-email": "kv@example.com",
+  };
+  const saveResponse = await worker.fetch(
+    new Request("https://jianzhang-test.chatgpt.site/api/cloud/state", {
+      method: "PUT",
+      headers: {
+        ...authHeaders,
+        origin: "https://jianzhang-test.chatgpt.site",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        state: {
+          ledgers: [{ id: "life", name: "生活账本" }],
+          records: [{ id: "kv-record", images: ["data:image/png;base64,aGk="] }],
+          dayBackgrounds: {},
+        },
+        baseRevision: 0,
+      }),
+    }),
+    env,
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(saveResponse.status, 200);
+  const saved = await saveResponse.json();
+  assert.match(saved.state.records[0].images[0], /^\/api\/cloud\/file\?key=/);
+  assert.equal(media.objects.size, 1);
+
+  const fileResponse = await worker.fetch(
+    new Request(`https://jianzhang-test.chatgpt.site${saved.state.records[0].images[0]}`, {
+      headers: authHeaders,
+    }),
+    env,
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(fileResponse.status, 200);
+  assert.equal(fileResponse.headers.get("content-type"), "image/png");
+  assert.equal(await fileResponse.text(), "hi");
 });
 
 class MockD1 {
@@ -284,6 +332,30 @@ class MockR2 {
           stored.bytes.byteOffset,
           stored.bytes.byteOffset + stored.bytes.byteLength,
         ),
+    };
+  }
+}
+
+class MockKV {
+  objects = new Map();
+
+  async put(key, value, options) {
+    const bytes = new Uint8Array(value);
+    this.objects.set(key, {
+      bytes,
+      metadata: options?.metadata || null,
+    });
+  }
+
+  async getWithMetadata(key) {
+    const stored = this.objects.get(key);
+    if (!stored) return { value: null, metadata: null };
+    return {
+      value: stored.bytes.buffer.slice(
+        stored.bytes.byteOffset,
+        stored.bytes.byteOffset + stored.bytes.byteLength,
+      ),
+      metadata: stored.metadata,
     };
   }
 }

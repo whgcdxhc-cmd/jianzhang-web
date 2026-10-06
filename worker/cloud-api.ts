@@ -3,6 +3,7 @@ import { authenticatedUser, type AuthBindings, type AuthUser } from "./auth";
 export interface CloudBindings extends AuthBindings {
   DB?: D1Database;
   FILES?: R2Bucket;
+  MEDIA?: KVNamespace;
 }
 
 type CloudUser = AuthUser;
@@ -256,17 +257,11 @@ async function externalizeImage(
   if (bytes.byteLength > MAX_IMAGE_BYTES) {
     throw new CloudApiError(413, "IMAGE_TOO_LARGE", "单张图片不能超过 6MB");
   }
-  const files = requireFiles(env);
   const scope = await userScope(userId);
   const hash = await sha256Hex(bytes);
   const extension = imageExtension(match[1].toLowerCase());
   const key = `${scope}/media/${hash}.${extension}`;
-  if (!(await files.head(key))) {
-    await files.put(key, bytes, {
-      httpMetadata: { contentType: match[1].toLowerCase() },
-      customMetadata: { owner: scope },
-    });
-  }
+  await storePrivateFile(key, bytes, match[1].toLowerCase(), scope, env);
   return `/api/cloud/file?key=${encodeURIComponent(key)}`;
 }
 
@@ -281,10 +276,10 @@ async function hydrateImage(
   const scope = await userScope(userId);
   if (!key.startsWith(`${scope}/`)) return value;
 
-  const object = await requireFiles(env).get(key);
+  const object = await readPrivateFile(key, env);
   if (!object) return value;
-  const bytes = new Uint8Array(await object.arrayBuffer());
-  const contentType = object.httpMetadata?.contentType || "image/jpeg";
+  const bytes = new Uint8Array(object.bytes);
+  const contentType = object.contentType;
   return `data:${contentType};base64,${encodeBase64(bytes)}`;
 }
 
@@ -298,16 +293,16 @@ async function servePrivateFile(
   if (!key.startsWith(`${scope}/`)) {
     return json({ error: "文件不存在", code: "FILE_NOT_FOUND" }, 404);
   }
-  const object = await requireFiles(env).get(key);
+  const object = await readPrivateFile(key, env);
   if (!object) {
     return json({ error: "文件不存在", code: "FILE_NOT_FOUND" }, 404);
   }
   const headers = new Headers({
     "cache-control": "private, no-store",
-    "content-type": object.httpMetadata?.contentType || "application/octet-stream",
+    "content-type": object.contentType,
     "x-content-type-options": "nosniff",
   });
-  return new Response(object.body, { headers });
+  return new Response(object.bytes, { headers });
 }
 
 async function readJsonPayload(request: Request): Promise<Record<string, unknown>> {
@@ -367,11 +362,51 @@ function requireDatabase(env: CloudBindings): D1Database {
   return env.DB;
 }
 
-function requireFiles(env: CloudBindings): R2Bucket {
-  if (!env.FILES) {
+function requireFileStore(env: CloudBindings): void {
+  if (!env.FILES && !env.MEDIA) {
     throw new CloudApiError(503, "FILES_UNAVAILABLE", "云端图片存储尚未完成配置");
   }
-  return env.FILES;
+}
+
+async function storePrivateFile(
+  key: string,
+  bytes: Uint8Array,
+  contentType: string,
+  owner: string,
+  env: CloudBindings,
+): Promise<void> {
+  requireFileStore(env);
+  if (env.FILES) {
+    if (!(await env.FILES.head(key))) {
+      await env.FILES.put(key, bytes, {
+        httpMetadata: { contentType },
+        customMetadata: { owner },
+      });
+    }
+    return;
+  }
+  await env.MEDIA!.put(key, bytes, { metadata: { contentType, owner } });
+}
+
+async function readPrivateFile(
+  key: string,
+  env: CloudBindings,
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  requireFileStore(env);
+  if (env.FILES) {
+    const object = await env.FILES.get(key);
+    if (!object) return null;
+    return {
+      bytes: await object.arrayBuffer(),
+      contentType: object.httpMetadata?.contentType || "application/octet-stream",
+    };
+  }
+  const object = await env.MEDIA!.getWithMetadata<{ contentType?: string }>(key, "arrayBuffer");
+  if (!object.value) return null;
+  return {
+    bytes: object.value,
+    contentType: object.metadata?.contentType || "application/octet-stream",
+  };
 }
 
 function imageExtension(contentType: string): string {
