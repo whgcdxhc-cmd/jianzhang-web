@@ -34,7 +34,7 @@ const JSON_HEADERS = {
 };
 const SESSION_COOKIE = "jianzhang_session";
 const SESSION_SECONDS = 30 * 24 * 60 * 60;
-const PASSWORD_ITERATIONS = 210_000;
+const PASSWORD_ITERATIONS = 100_000;
 const MAX_AUTH_BODY_BYTES = 16 * 1024;
 const MAX_ATTEMPTS = 8;
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
