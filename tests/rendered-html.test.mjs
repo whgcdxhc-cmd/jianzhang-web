@@ -8,7 +8,8 @@ const builtIndexUrl = new URL("../dist/client/index.html", import.meta.url);
 function assertJianzhangContent(html) {
   assert.match(html, /<title>简账/);
   assert.match(html, /id="authGate"/);
-  assert.match(html, /使用 ChatGPT 账号安全登录/);
+  assert.match(html, /id="authForm"/);
+  assert.match(html, /id="authRegisterTab"/);
   assert.match(html, /只保存在你的云端账号中，不写入本机数据库/);
   assert.match(html, /placeholder="例如：这个月餐饮花了多少？"/);
   assert.match(html, /placeholder="例如：昨天晚上和朋友吃饭 68 元"/);
@@ -39,9 +40,10 @@ test("service worker advances the cloud cache and never caches account data", as
     readFile(new URL("../dist/client/sw.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(sourceWorker, /jianzhang-0\.3\.3-budget-view/);
+  assert.match(sourceWorker, /jianzhang-0\.4\.0-independent-cloud/);
   assert.match(sourceWorker, /\.\/importers\.js/);
   assert.match(sourceWorker, /url\.pathname\.startsWith\("\/api\/cloud\/"\)/);
+  assert.match(sourceWorker, /url\.pathname\.startsWith\("\/api\/auth\/"\)/);
   assert.equal(builtWorker, sourceWorker);
 });
 
@@ -115,6 +117,41 @@ test("cloud API rejects anonymous account reads", async () => {
   });
 });
 
+test("independent account registration creates a secure session", async () => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("register-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const db = new AuthMockD1();
+  const registerResponse = await worker.fetch(
+    new Request("https://jianzhang.example/api/auth/register", {
+      method: "POST",
+      headers: { origin: "https://jianzhang.example", "content-type": "application/json" },
+      body: JSON.stringify({ email: "Owner@Example.com", password: "secure-pass-123", displayName: "小简" }),
+    }),
+    { DB: db },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(registerResponse.status, 201);
+  const cookie = registerResponse.headers.get("set-cookie") ?? "";
+  assert.match(cookie, /^jianzhang_session=/);
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /Secure/);
+  assert.match(cookie, /SameSite=Lax/);
+
+  const sessionResponse = await worker.fetch(
+    new Request("https://jianzhang.example/api/auth/session", {
+      headers: { cookie: cookie.split(";")[0] },
+    }),
+    { DB: db },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(sessionResponse.status, 200);
+  const session = await sessionResponse.json();
+  assert.equal(session.authenticated, true);
+  assert.equal(session.account.email, "owner@example.com");
+  assert.equal(session.account.displayName, "小简");
+});
+
 test("authenticated cloud state round-trips through D1 and R2", async () => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("cloud-test", `${process.pid}-${Date.now()}`);
@@ -133,11 +170,11 @@ test("authenticated cloud state round-trips through D1 and R2", async () => {
   };
 
   const saveResponse = await worker.fetch(
-    new Request("http://localhost/api/cloud/state", {
+    new Request("https://jianzhang-test.chatgpt.site/api/cloud/state", {
       method: "PUT",
       headers: {
         ...authHeaders,
-        origin: "http://localhost",
+        origin: "https://jianzhang-test.chatgpt.site",
         "content-type": "application/json",
       },
       body: JSON.stringify({ state, baseRevision: 0 }),
@@ -153,7 +190,7 @@ test("authenticated cloud state round-trips through D1 and R2", async () => {
   assert.equal(files.objects.size, 1);
 
   const accountResponse = await worker.fetch(
-    new Request("http://localhost/api/cloud/account", { headers: authHeaders }),
+    new Request("https://jianzhang-test.chatgpt.site/api/cloud/account", { headers: authHeaders }),
     env,
     { waitUntil() {}, passThroughOnException() {} },
   );
@@ -162,7 +199,7 @@ test("authenticated cloud state round-trips through D1 and R2", async () => {
   assert.equal(account.account.email, "test@example.com");
 
   const exportResponse = await worker.fetch(
-    new Request("http://localhost/api/cloud/export", { headers: authHeaders }),
+    new Request("https://jianzhang-test.chatgpt.site/api/cloud/export", { headers: authHeaders }),
     env,
     { waitUntil() {}, passThroughOnException() {} },
   );
@@ -176,6 +213,7 @@ class MockD1 {
   row = null;
 
   prepare(sql) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const database = this;
     return {
       values: [],
@@ -246,6 +284,70 @@ class MockR2 {
           stored.bytes.byteOffset,
           stored.bytes.byteOffset + stored.bytes.byteLength,
         ),
+    };
+  }
+}
+
+class AuthMockD1 {
+  usersByEmail = new Map();
+  usersById = new Map();
+  sessions = new Map();
+  attempts = new Map();
+
+  prepare(sql) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const database = this;
+    return {
+      values: [],
+      bind(...values) {
+        this.values = values;
+        return this;
+      },
+      async first() {
+        if (sql.startsWith("SELECT id, email, display_name")) {
+          return database.usersByEmail.get(this.values[0]) || null;
+        }
+        if (sql.startsWith("SELECT users.id AS user_id")) {
+          const session = database.sessions.get(this.values[0]);
+          if (!session || session.expires_at <= this.values[1]) return null;
+          const user = database.usersById.get(session.user_id);
+          return user ? { user_id: user.id, email: user.email, display_name: user.display_name } : null;
+        }
+        if (sql.startsWith("SELECT attempts")) {
+          return database.attempts.get(this.values[0]) || null;
+        }
+        throw new Error(`Unexpected first SQL: ${sql}`);
+      },
+      async run() {
+        if (sql.startsWith("INSERT INTO users")) {
+          const [id, email, displayName, passwordHash, passwordSalt, passwordIterations, createdAt, updatedAt] = this.values;
+          if (database.usersByEmail.has(email)) throw new Error("UNIQUE constraint failed");
+          const user = { id, email, display_name: displayName, password_hash: passwordHash, password_salt: passwordSalt, password_iterations: passwordIterations, created_at: createdAt, updated_at: updatedAt };
+          database.usersByEmail.set(email, user);database.usersById.set(id, user);
+          return { meta: { changes: 1 } };
+        }
+        if (sql.startsWith("INSERT INTO sessions")) {
+          const [tokenHash, userId, createdAt, expiresAt] = this.values;
+          database.sessions.set(tokenHash, { user_id: userId, created_at: createdAt, expires_at: expiresAt });
+          return { meta: { changes: 1 } };
+        }
+        if (sql.startsWith("DELETE FROM sessions WHERE user_id")) return { meta: { changes: 0 } };
+        if (sql.startsWith("DELETE FROM sessions WHERE token_hash")) {
+          return { meta: { changes: database.sessions.delete(this.values[0]) ? 1 : 0 } };
+        }
+        if (sql.startsWith("DELETE FROM auth_attempts")) {
+          return { meta: { changes: database.attempts.delete(this.values[0]) ? 1 : 0 } };
+        }
+        if (sql.startsWith("INSERT INTO auth_attempts")) {
+          database.attempts.set(this.values[0], { attempts: 1, window_started: this.values[1] });
+          return { meta: { changes: 1 } };
+        }
+        if (sql.startsWith("UPDATE auth_attempts")) {
+          const row = database.attempts.get(this.values[0]);if (row) row.attempts += 1;
+          return { meta: { changes: row ? 1 : 0 } };
+        }
+        throw new Error(`Unexpected run SQL: ${sql}`);
+      },
     };
   }
 }

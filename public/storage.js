@@ -58,6 +58,27 @@ export async function importCloudState(payload) {
   return result.state;
 }
 
+export async function loginAccount(email, password) {
+  return request("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function registerAccount(email, password, displayName) {
+  return request("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password, displayName }),
+  });
+}
+
+export async function logoutAccount() {
+  return request("/api/auth/logout", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export function getCloudStatus() {
   return {
     account: cloudAccount,

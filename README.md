@@ -1,100 +1,70 @@
-# vinext-starter
+# 简账
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+个人记账 PWA，核心体验是“极速记录 + 自动记账 + 生活时间轴 + 搜索分析”。
 
-## Prerequisites
+## 当前能力
 
-- Node.js `>=22.13.0`
+- 手动记账、快记、iOS 快捷指令 URL 自动记账
+- 多账本、一二级分类、标签、图片、Mood、位置和不计入统计
+- 修改、删除、退款、再记、左滑操作
+- 日/周/月/季度/年统计、柱状图、饼图、日报表和周视图
+- 预算、账本封面、深浅主题和字体设置
+- 微信支付 Excel、支付宝 CSV 和 JSON 备份导入导出
+- 独立邮箱账号、云端账本、云端图片和多设备同步
+- PWA 安装与 Service Worker 离线外壳
 
-## Quick Start
+## 技术结构
+
+- 前端：`public/`
+- 自动识别：`public/parser.js`
+- 账单导入：`public/importers.js`
+- 云端同步：`public/storage.js`
+- 独立账号：`worker/auth.ts`
+- 云端账本与图片接口：`worker/cloud-api.ts`
+- 数据库结构和迁移：`db/`、`drizzle/`
+- 部署：Cloudflare Workers + D1 + R2
+
+正式账单只保存到 D1/R2；浏览器里的旧 IndexedDB 数据只用于一次性迁移，迁移成功后会删除。
+
+## 本地开发
+
+要求 Node.js `>=22.13.0`。
 
 ```bash
 npm install
-npm run dev
 npm run build
+npx wrangler d1 migrations apply jianzhang-db --local --config wrangler.jsonc
+npm run dev
 ```
 
-This starter does not use `wrangler.jsonc`.
+另开终端执行端到端云端流程测试：
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+node tests/local-cloud-e2e.mjs
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+完整自动测试：
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+```bash
+npm test
+```
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+## Cloudflare 免费部署
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+1. `npx wrangler login`
+2. `npx wrangler d1 create jianzhang-db`
+3. 把返回的 D1 `database_id` 写入 `wrangler.jsonc`
+4. `npx wrangler r2 bucket create jianzhang-files`
+5. `npx wrangler d1 migrations apply jianzhang-db --remote --config wrangler.jsonc`
+6. `npm run build`
+7. `npx wrangler deploy --config dist/server/wrangler.json`
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+首次访问正式网址时注册简账账号即可。生产环境使用 HttpOnly、Secure、SameSite Cookie；密码通过 PBKDF2-SHA256 加盐哈希存储。
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## 自动记账 URL
 
-## Useful Commands
+```text
+https://你的简账地址/?autobook=1&text=<URL编码后的屏幕识别文字>
+```
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+该协议保留给 iOS 快捷指令、Android 分享和未来自动化入口使用。

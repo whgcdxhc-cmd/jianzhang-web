@@ -24,14 +24,30 @@
     <div class="eyebrow">简账云端</div>
     <h1 id="authTitle">登录后开始记账</h1>
     <p>账单、账本、标签、图片和生活时间轴只保存在你的云端账号中，不写入本机数据库。</p>
-    <a id="authLogin" class="auth-login" href="/signin-with-chatgpt?return_to=/">使用 ChatGPT 账号安全登录</a>
-    <small>首次登录会自动把本设备旧版 IndexedDB 数据迁移到云端，成功后删除本地旧数据库。</small>
+    <div class="auth-tabs" role="tablist" aria-label="账号操作">
+      <button id="authLoginTab" class="active" type="button" role="tab" aria-selected="true">登录</button>
+      <button id="authRegisterTab" type="button" role="tab" aria-selected="false">注册</button>
+    </div>
+    <form id="authForm" class="auth-form">
+      <label id="authNameRow" class="hidden">昵称
+        <input id="authName" name="name" maxlength="40" autocomplete="nickname" placeholder="例如：小简">
+      </label>
+      <label>邮箱
+        <input id="authEmail" name="email" type="email" maxlength="254" autocomplete="email" inputmode="email" required placeholder="name@example.com">
+      </label>
+      <label>密码
+        <input id="authPassword" name="password" type="password" minlength="8" maxlength="128" autocomplete="current-password" required placeholder="至少 8 个字符">
+      </label>
+      <button id="authSubmit" class="auth-login" type="submit">登录</button>
+      <div id="authError" class="auth-error hidden" role="alert"></div>
+    </form>
+    <small>首次登录会自动把本设备旧版 IndexedDB 数据迁移到云端，成功后删除本地旧数据库。请妥善保存密码。</small>
   </div>
 </section>
 <div id="app">
   <header class="topbar">
     <button id="ledgerSwitch" class="ledger-switch">生活账本⌄</button>
-    <div class="brand">简账 <span>云端 0.3</span></div>
+    <div class="brand">简账 <span>云端 0.4</span></div>
     <div class="topbar-actions"><button id="cloudAccountButton" class="cloud-account">云端</button><button id="openSettings" class="icon-btn">⚙</button></div>
   </header>
 
@@ -126,7 +142,7 @@
         <button id="autoTileSettings">自动记账磁贴 <span>›</span></button>
         <button id="locationTest">测试定位权限 <span>›</span></button>
         <button id="installHelp">安装到桌面/主屏幕 <span>›</span></button>
-        <a class="settings-button sign-out" href="/signout-with-chatgpt?return_to=/">退出云端账号 <span>›</span></a>
+        <button id="signOut" class="settings-button sign-out" type="button">退出云端账号 <span>›</span></button>
       </div>
       <div id="billImportStatus" class="import-status hidden" role="status"></div>
       <div class="appearance-card">

@@ -1,4 +1,4 @@
-import {loadState,saveState,exportCloudState,importCloudState,getCloudStatus,CloudStorageError} from "./storage.js";
+import {loadState,saveState,exportCloudState,importCloudState,getCloudStatus,loginAccount,registerAccount,logoutAccount,CloudStorageError} from "./storage.js";
 import {parseBookkeepingText} from "./parser.js";
 import {parseWechatExcel,parseAlipayCsv} from "./importers.js";
 
@@ -22,7 +22,7 @@ const FONT_PRESETS={
 };
 
 const defaultState={
-  version:"0.3.0",
+  version:"0.4.0",
   currentLedgerId:"life",
   ledgers:[{id:"life",name:"生活账本"},{id:"travel",name:"旅游账本"}],
   categories:{
@@ -55,7 +55,7 @@ const defaultState={
 
 let state=clone(defaultState);
 let rec={type:"expense",amount:"0.00",primaryId:"food",secondary:"",date:today(),time:nowTime(),tags:[],note:"",exclude:false,location:null,images:[],mood:""};
-let editingId=null,currentCoords=null,categoryManageType="expense",swipeOpen=null,aiCandidate=null,currentAutoCapture=null,ledgerCoverTargetId=null;
+let editingId=null,currentCoords=null,categoryManageType="expense",swipeOpen=null,currentAutoCapture=null,ledgerCoverTargetId=null;
 
 function normalize(s){
   const x={...clone(defaultState),...(s||{})};
@@ -115,8 +115,7 @@ function closeAll(){$$(".sheet").forEach(x=>x.classList.add("hidden"));$("backdr
 function navigate(name){$$(".page").forEach(p=>p.classList.remove("active"));$(`page-${name}`).classList.add("active");$$(".bottom-nav [data-nav]").forEach(b=>b.classList.toggle("active",b.dataset.nav===name));if(name==="week")renderWeek();window.scrollTo(0,0)}
 function range(period,anchor=new Date()){
   const d=new Date(anchor.getFullYear(),anchor.getMonth(),anchor.getDate()),s=new Date(d),e=new Date(d);
-  if(period==="day"){}
-  else if(period==="week"){const k=(d.getDay()+6)%7;s.setDate(d.getDate()-k);e.setTime(s.getTime());e.setDate(s.getDate()+6)}
+  if(period==="week"){const k=(d.getDay()+6)%7;s.setDate(d.getDate()-k);e.setTime(s.getTime());e.setDate(s.getDate()+6)}
   else if(period==="month"){s.setDate(1);e.setFullYear(d.getFullYear(),d.getMonth()+1,0)}
   else if(period==="quarter"){const q=Math.floor(d.getMonth()/3)*3;s.setFullYear(d.getFullYear(),q,1);e.setFullYear(d.getFullYear(),q+3,0)}
   else{s.setFullYear(d.getFullYear(),0,1);e.setFullYear(d.getFullYear(),11,31)}
@@ -254,66 +253,7 @@ function renderTemplateManager(){
   $("templateManager").innerHTML=state.templates.map(t=>`<div class="manage-row"><span><b>${esc(t.name)}</b><div class="record-sub">${esc(categoryText(t))} · ${money(t.amount)}</div></span><div class="manage-actions"><button data-template-use="${t.id}">使用</button><button data-template-delete="${t.id}">删除</button></div></div>`).join("")||`<div class="semantic-result">暂无模板</div>`;
   const ds=$("dayDate").value||today(),rs=state.records.filter(r=>r.date===ds&&r.ledgerId===state.currentLedgerId);$("templateSources").innerHTML=rs.map(r=>`<div class="manage-row"><span>${esc(categoryText(r))} · ${money(r.amount)}</span><button data-template-from="${r.id}">设为模板</button></div>`).join("")||`<div class="semantic-result">当前日暂无账单</div>`
 }
-function useTemplate(id){const t=state.templates.find(x=>x.id===id);if(!t)return;closeAll();openRecord({...clone(t),id:null,date:$("dayDate").value||today(),time:nowTime(),ledgerId:state.currentLedgerId})}
-function extractMoney(text){
-  const rules=[
-    /(?:支付金额|付款金额|实付款|实付|交易金额|订单金额|收款金额|到账金额|退款金额)\s*[:：]?\s*[¥￥]?\s*(\d+(?:\.\d{1,2})?)/i,
-    /[¥￥]\s*(\d+(?:\.\d{1,2})?)/,
-    /(?:支付|付款|消费|收款|到账|退款|转账)[^\d]{0,10}(\d+(?:\.\d{1,2})?)\s*(?:元|块|块钱)?/
-  ];
-  for(const re of rules){const m=text.match(re);if(m){const n=Number(m[1]);if(n>0&&n<1000000)return n}}
-  const nums=[...text.matchAll(/(?<![\d])(\d+(?:\.\d{1,2})?)(?![\d])/g)].map(m=>Number(m[1])).filter(n=>n>0&&n<100000);
-  const decimals=nums.filter(n=>!Number.isInteger(n));return decimals[0]??nums.find(n=>n<10000)??0
-}
-function extractMerchant(text){
-  const known=["瑞幸咖啡","星巴克","海底捞","麦当劳","肯德基","美团外卖","饿了么","滴滴出行","高德打车","铁路12306","盒马","山姆","京东","淘宝","拼多多","携程","去哪儿"];
-  const exact=known.find(x=>text.includes(x));if(exact)return exact;
-  const lines=text.split(/\n+/).map(x=>x.trim()).filter(Boolean);
-  const blacklist=/微信|支付宝|支付成功|付款成功|交易成功|收款成功|账单|订单|商户|支付方式|付款方式|交易时间|时间|¥|￥|金额|余额|银行卡|零钱|花呗|信用卡|完成|返回|详情|转账|收款|\d{4}[-/.]\d{1,2}/;
-  return lines.find(x=>x.length>=2&&x.length<=24&&!blacklist.test(x))||""
-}
-function classifyCapture(text,type,merchant,time){
-  const t=(text+" "+merchant);
-  const rules=[
-    [/瑞幸|星巴克|咖啡/,["food","咖啡"]],
-    [/海底捞|火锅|晚餐/,["food","晚餐"]],
-    [/早餐|豆浆|包子|早餐店/,["food","早餐"]],
-    [/午餐|午饭/,["food","午餐"]],
-    [/麦当劳|肯德基|美团外卖|饿了么|餐厅|饭店|餐饮/,["food",""]],
-    [/滴滴|高德打车|出租车|网约车/,["transport","打车"]],
-    [/地铁/,["transport","地铁"]],
-    [/公交/,["transport","公交"]],
-    [/12306|铁路|高铁|动车/,["transport","高铁"]],
-    [/酒店|民宿|携程|去哪儿/,["travel-e","住宿"]],
-    [/门票|景区/,["travel-e","门票"]],
-    [/医院|门诊|药房|药店/,["medical",""]],
-    [/话费|中国移动|中国电信|中国联通|宽带/,["network",""]],
-    [/淘宝|京东|拼多多|盒马|山姆|商场|超市/,["shopping",""]]
-  ];
-  if(type==="income"){
-    if(/退款|退回/.test(t))return ["refund-i","退款"];
-    if(/工资|薪资/.test(t))return ["salary",""];
-    if(/红包/.test(t))return ["gift-i","红包"];
-    if(/转账|收款/.test(t))return ["gift-i","转账"];
-    return ["other-i",""]
-  }
-  for(const [re,pair] of rules)if(re.test(t))return pair;
-  const h=Number((time||"12:00:00").slice(0,2));if(/餐|饭|食堂/.test(t))return ["food",h<10?"早餐":h<15?"午餐":"晚餐"];
-  return ["other-e",""]
-}
-function extractDateTime(text){
-  let date=today(),time=nowTime(),m;
-  m=text.match(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?/);if(m)date=`${m[1]}-${pad(m[2])}-${pad(m[3])}`;
-  m=text.match(/\b([01]?\d|2[0-3])[:：]([0-5]\d)(?:[:：]([0-5]\d))?\b/);if(m)time=`${pad(m[1])}:${m[2]}:${m[3]||"00"}`;
-  const d=new Date();if(/昨天/.test(text)){d.setDate(d.getDate()-1);date=today(d)}else if(/前天/.test(text)){d.setDate(d.getDate()-2);date=today(d)}else if(/大前天/.test(text)){d.setDate(d.getDate()-3);date=today(d)}
-  return {date,time}
-}
-function detectPaymentSource(text){
-  if(/支付宝|花呗/.test(text))return "支付宝";
-  if(/微信|零钱通|零钱/.test(text))return "微信支付";
-  if(/云闪付/.test(text))return "云闪付";
-  return "识屏"
-}
+function applyTemplate(id){const t=state.templates.find(x=>x.id===id);if(!t)return;closeAll();openRecord({...clone(t),id:null,date:$("dayDate").value||today(),time:nowTime(),ledgerId:state.currentLedgerId})}
 async function parseNatural(text,source="文字"){
   return parseBookkeepingText({text,source,categories:state.categories,knownTags:allTags(),defaultLedgerId:state.currentLedgerId});
 }
@@ -326,7 +266,7 @@ async function handleAutoBook(text,source="自动记账磁贴"){
   else showToast("已自动填入，可修改后保存");
   return c
 }
-function showCandidate(c){aiCandidate=c;$("aiCandidate").classList.remove("hidden");$("aiCandidate").innerHTML=`<div>${esc(c.source)} · 置信度 ${c.confidence}%</div><div class="amount ${c.type}">${c.type==="income"?"+":"-"}${money(c.amount)}</div><b>${esc(categoryText(c))}</b><div class="record-sub">${esc(c.date+" "+c.time)}${c.merchant?" · "+esc(c.merchant):""}</div><div class="candidate-actions"><button id="candidateEdit">调整</button><button id="candidateSave">直接保存</button></div>`;$("candidateEdit").onclick=()=>{closeSheet("aiSheet");openRecord({...c,id:null})};$("candidateSave").onclick=async()=>{if(!c.amount)return showToast("未识别到金额");state.records.push({id:uid("quick"),...c,createdAt:Date.now(),updatedAt:Date.now()});await persist();closeSheet("aiSheet");showToast("快记已保存")}}
+function showCandidate(c){$("aiCandidate").classList.remove("hidden");$("aiCandidate").innerHTML=`<div>${esc(c.source)} · 置信度 ${c.confidence}%</div><div class="amount ${c.type}">${c.type==="income"?"+":"-"}${money(c.amount)}</div><b>${esc(categoryText(c))}</b><div class="record-sub">${esc(c.date+" "+c.time)}${c.merchant?" · "+esc(c.merchant):""}</div><div class="candidate-actions"><button id="candidateEdit">调整</button><button id="candidateSave">直接保存</button></div>`;$("candidateEdit").onclick=()=>{closeSheet("aiSheet");openRecord({...c,id:null})};$("candidateSave").onclick=async()=>{if(!c.amount)return showToast("未识别到金额");state.records.push({id:uid("quick"),...c,createdAt:Date.now(),updatedAt:Date.now()});await persist();closeSheet("aiSheet");showToast("快记已保存")}}
 function switchAI(mode){$$("[data-ai]").forEach(b=>b.classList.toggle("active",b.dataset.ai===mode));["Text","Voice","Image","Shortcut"].forEach(n=>$(`ai${n}Pane`).classList.add("hidden"));$(`ai${mode[0].toUpperCase()+mode.slice(1)}Pane`).classList.remove("hidden")}
 function startVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return showToast("当前浏览器不支持语音识别");
@@ -362,6 +302,28 @@ async function importBillFile(file,parser,label){
   }catch(err){console.error(err);status.textContent=`${label}导入失败：${err?.message||"文件格式无效"}`;showToast(`${label}导入失败`)}
 }
 
+let authMode="login";
+function setAuthMode(mode){
+  authMode=mode==="register"?"register":"login";
+  const registering=authMode==="register";
+  $("authLoginTab").classList.toggle("active",!registering);$("authLoginTab").setAttribute("aria-selected",String(!registering));
+  $("authRegisterTab").classList.toggle("active",registering);$("authRegisterTab").setAttribute("aria-selected",String(registering));
+  $("authNameRow").classList.toggle("hidden",!registering);$("authName").required=registering;
+  $("authPassword").autocomplete=registering?"new-password":"current-password";
+  $("authSubmit").textContent=registering?"创建账号并进入简账":"登录";
+  $("authError").classList.add("hidden");
+}
+function bindAuth(){
+  $("authLoginTab").onclick=()=>setAuthMode("login");$("authRegisterTab").onclick=()=>setAuthMode("register");
+  $("authForm").onsubmit=async event=>{
+    event.preventDefault();const submit=$("authSubmit"),error=$("authError"),email=$("authEmail").value.trim(),password=$("authPassword").value,name=$("authName").value.trim();
+    error.classList.add("hidden");submit.disabled=true;submit.textContent=authMode==="register"?"正在创建账号…":"正在登录…";
+    try{if(authMode==="register")await registerAccount(email,password,name);else await loginAccount(email,password);location.reload()}
+    catch(err){error.textContent=err?.message||"账号操作失败，请稍后重试";error.classList.remove("hidden");submit.disabled=false;submit.textContent=authMode==="register"?"创建账号并进入简账":"登录"}
+  };
+  setAuthMode("login");
+}
+
 function bind(){
   document.addEventListener("click",action);$("cloudAccountButton").onclick=()=>navigate("settings");
   $$("[data-nav]").forEach(b=>b.onclick=()=>navigate(b.dataset.nav));$("homeAdd").onclick=$("navAdd").onclick=()=>openRecord();$("homeAI").onclick=()=>openSheet("aiSheet");$("openSettings").onclick=()=>navigate("settings");$("ledgerSwitch").onclick=()=>{renderLedgerManager();openSheet("ledgerSheet")};
@@ -381,7 +343,7 @@ function bind(){
   $("weekStrip").onclick=e=>{const b=e.target.closest("[data-week-day]");if(b){$("dayDate").value=b.dataset.weekDay;renderWeek()}};$("prevWeek").onclick=()=>{const d=new Date($("dayDate").value+"T12:00:00");d.setDate(d.getDate()-7);$("dayDate").value=today(d);renderWeek()};$("nextWeek").onclick=()=>{const d=new Date($("dayDate").value+"T12:00:00");d.setDate(d.getDate()+7);$("dayDate").value=today(d);renderWeek()};$("weekToday").onclick=()=>{$("dayDate").value=today();renderWeek()};
   $("editDay").onclick=()=>{const m=state.dayMeta[$("dayDate").value]||{};$("editDayTitle").value=m.title||"";$("editDayMood").value=m.mood||"";$("editDayNote").value=m.note||"";openSheet("dayEditSheet")};$("saveDayMeta").onclick=async()=>{state.dayMeta[$("dayDate").value]={title:$("editDayTitle").value.trim(),mood:$("editDayMood").value.trim(),note:$("editDayNote").value.trim()};await persist();closeSheet("dayEditSheet")};
   $("dayBgInput").onchange=async e=>{const f=e.target.files?.[0];if(f){state.dayBackgrounds[$("dayDate").value]=await compress(f,1400,.76);await persist()}e.target.value=""};$("clearDayBg").onclick=async()=>{delete state.dayBackgrounds[$("dayDate").value];await persist()};
-  $("manageTemplates").onclick=()=>{renderTemplateManager();openSheet("templateSheet")};$("templateStrip").onclick=e=>{const b=e.target.closest("[data-use-template]");if(b)useTemplate(b.dataset.useTemplate)};$("templateManager").onclick=async e=>{const u=e.target.closest("[data-template-use]"),d=e.target.closest("[data-template-delete]");if(u)useTemplate(u.dataset.templateUse);if(d){state.templates=state.templates.filter(t=>t.id!==d.dataset.templateDelete);await persist();renderTemplateManager()}};$("templateSources").onclick=async e=>{const b=e.target.closest("[data-template-from]");if(!b)return;const r=state.records.find(x=>x.id===b.dataset.templateFrom),name=prompt("模板名称",r.secondary||cat(r.type,r.primaryId)?.name||"常用记账");if(name){state.templates.push({id:uid("tpl"),name,type:r.type,amount:r.amount,primaryId:r.primaryId,secondary:r.secondary,tags:r.tags||[],note:r.note||"",exclude:r.exclude,mood:r.mood||"",location:r.location||null,images:[]});await persist();renderTemplateManager()}};
+  $("manageTemplates").onclick=()=>{renderTemplateManager();openSheet("templateSheet")};$("templateStrip").onclick=e=>{const b=e.target.closest("[data-use-template]");if(b)applyTemplate(b.dataset.useTemplate)};$("templateManager").onclick=async e=>{const u=e.target.closest("[data-template-use]"),d=e.target.closest("[data-template-delete]");if(u)applyTemplate(u.dataset.templateUse);if(d){state.templates=state.templates.filter(t=>t.id!==d.dataset.templateDelete);await persist();renderTemplateManager()}};$("templateSources").onclick=async e=>{const b=e.target.closest("[data-template-from]");if(!b)return;const r=state.records.find(x=>x.id===b.dataset.templateFrom),name=prompt("模板名称",r.secondary||cat(r.type,r.primaryId)?.name||"常用记账");if(name){state.templates.push({id:uid("tpl"),name,type:r.type,amount:r.amount,primaryId:r.primaryId,secondary:r.secondary,tags:r.tags||[],note:r.note||"",exclude:r.exclude,mood:r.mood||"",location:r.location||null,images:[]});await persist();renderTemplateManager()}};
   $("manageLedgers").onclick=()=>{renderLedgerManager();openSheet("ledgerSheet")};$("ledgerManager").onclick=async e=>{const u=e.target.closest("[data-ledger-use]"),cover=e.target.closest("[data-ledger-cover]"),clear=e.target.closest("[data-ledger-cover-clear]"),rn=e.target.closest("[data-ledger-rename]"),d=e.target.closest("[data-ledger-delete]");if(u){state.currentLedgerId=u.dataset.ledgerUse;await persist();renderLedgerManager()}if(cover){ledgerCoverTargetId=cover.dataset.ledgerCover;$("ledgerCoverInput").click()}if(clear){const l=state.ledgers.find(x=>x.id===clear.dataset.ledgerCoverClear);if(l&&confirm(`清除“${l.name}”的封面？`)){delete l.cover;await persist();renderLedgerManager()}}if(rn){const l=state.ledgers.find(x=>x.id===rn.dataset.ledgerRename),v=prompt("账本名称",l.name);if(v){l.name=v.trim();await persist();renderLedgerManager()}}if(d&&confirm("删除账本会删除其中账单，确定？")){const id=d.dataset.ledgerDelete;state.ledgers=state.ledgers.filter(x=>x.id!==id);state.records=state.records.filter(r=>r.ledgerId!==id);state.currentLedgerId=state.ledgers[0].id;await persist();renderLedgerManager()}};
   $("ledgerCoverInput").onchange=async e=>{const file=e.target.files?.[0],ledger=state.ledgers.find(item=>item.id===ledgerCoverTargetId);try{if(file&&ledger){showToast("正在处理封面…");ledger.cover=await compress(file,1400,.78);if(await persist()){renderLedgerManager();showToast("账本封面已保存")}}}catch(err){console.error(err);showToast(err?.message||"封面保存失败")}finally{e.target.value="";ledgerCoverTargetId=null}};
   $("addLedger").onclick=async()=>{const v=$("newLedger").value.trim();if(v){state.ledgers.push({id:uid("ledger"),name:v});$("newLedger").value="";await persist();renderLedgerManager()}};
@@ -399,9 +361,11 @@ function bind(){
   $("showRawCapture").onclick=()=>$("rawCaptureBox").classList.toggle("hidden");
   $("locationTest").onclick=()=>{openLocation();requestLocation()};$("installHelp").onclick=()=>alert("正式 PWA 部署到 HTTPS 后：iPhone 可在 Safari 分享菜单中选择“添加到主屏幕”；Windows/Android 支持的浏览器会显示安装入口。");
   $("voiceFromRecord").onclick=()=>{closeSheet("recordSheet");openSheet("aiSheet");switchAI("voice")};
+  $("signOut").onclick=async()=>{if(!confirm("确定退出当前云端账号吗？"))return;try{await logoutAccount();location.reload()}catch(err){showToast(err?.message||"退出失败，请稍后重试")}};
 }
 
 async function init(){
+  bindAuth();
   try{
     state=normalize(await loadState());
     document.body.dataset.sync="saved";
@@ -412,6 +376,6 @@ async function init(){
     if(isAuto)setTimeout(()=>handleAutoBook(autoText,"iOS 快捷指令磁贴"),180);
   }catch(err){console.error(err);if(err instanceof CloudStorageError&&err.code==="AUTH_REQUIRED"){showAuthGate();return}$("fatalError").classList.remove("hidden");$("fatalError").textContent="简账启动失败\n\n"+(err?.message||err)}
 }
-function showAuthGate(){document.body.classList.add("auth-required");$("authGate").classList.remove("hidden");const returnTo=location.pathname+location.search+location.hash;$("authLogin").href=`/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`}
+function showAuthGate(){document.body.classList.add("auth-required");$("authGate").classList.remove("hidden");setTimeout(()=>$("authEmail")?.focus(),50)}
 window.addEventListener("error",e=>{console.error(e.error||e.message)});
 init();

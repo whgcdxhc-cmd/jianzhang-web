@@ -1,4 +1,4 @@
-const CACHE = "jianzhang-0.3.3-budget-view";
+const CACHE = "jianzhang-0.4.0-independent-cloud";
 const ASSETS = [
   "./",
   "./index.html",
@@ -40,9 +40,7 @@ self.addEventListener("fetch", (event) => {
   if (
     url.origin === self.location.origin &&
     (url.pathname.startsWith("/api/cloud/") ||
-      url.pathname === "/signin-with-chatgpt" ||
-      url.pathname === "/signout-with-chatgpt" ||
-      url.pathname === "/callback")
+      url.pathname.startsWith("/api/auth/"))
   ) {
     return;
   }

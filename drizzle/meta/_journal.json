@@ -8,6 +8,13 @@
       "when": 1786758998244,
       "tag": "0000_chunky_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791192844677,
+      "tag": "0001_solid_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

@@ -1,13 +1,11 @@
-export interface CloudBindings {
+import { authenticatedUser, type AuthBindings, type AuthUser } from "./auth";
+
+export interface CloudBindings extends AuthBindings {
   DB?: D1Database;
   FILES?: R2Bucket;
 }
 
-type CloudUser = {
-  userId: string;
-  email: string;
-  displayName: string;
-};
+type CloudUser = AuthUser;
 
 type CloudStateRow = {
   state_json: string;
@@ -32,7 +30,7 @@ export async function handleCloudApi(
   if (!url.pathname.startsWith("/api/cloud/")) return null;
 
   try {
-    const user = authenticatedUser(request);
+    const user = await authenticatedUser(request, env);
     if (!user) {
       return json(
         { error: "请先登录简账云端账号", code: "AUTH_REQUIRED" },
@@ -111,26 +109,6 @@ export async function handleCloudApi(
       500,
     );
   }
-}
-
-function authenticatedUser(request: Request): CloudUser | null {
-  const userId = request.headers.get("oai-authenticated-user-id")?.trim();
-  const email = request.headers.get("oai-authenticated-user-email")?.trim();
-  if (!userId || !email) return null;
-
-  const encodedName = request.headers.get("oai-authenticated-user-full-name");
-  const encoding = request.headers.get(
-    "oai-authenticated-user-full-name-encoding",
-  );
-  let displayName = email;
-  if (encodedName && encoding === "percent-encoded-utf-8") {
-    try {
-      displayName = decodeURIComponent(encodedName);
-    } catch {
-      displayName = email;
-    }
-  }
-  return { userId, email, displayName };
 }
 
 function isSameOriginRequest(request: Request): boolean {
@@ -440,7 +418,7 @@ function finiteInteger(value: unknown, fallback: number): number {
   return Number.isInteger(number) && number >= 0 ? number : fallback;
 }
 
-function isObject(value: unknown): value is Record<string, any> {
+function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
